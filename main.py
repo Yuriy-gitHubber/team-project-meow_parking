@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, Body, Request,Query
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
@@ -14,8 +15,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
-import usersDB
-import src.auth as auth
+from src.reg import exportUsers,Registration,RegStatus
+from src.auth import authorize,AuthStatus
+from src.ResPlace import PlaceReservation,ResStatus,FreeingUpParkingPlace
+from src.search import CheckUserParkingPlaces
+connection_string = "postgres://postgres:200210@localhost:5432/parking_information"
+
+engineUsers = create_engine('postgresql+psycopg2://postgres:200210@localhost:5432/parking_information', echo=True)
+engineUsers.connect()
+
+sessionUsers = sessionmaker(autoflush=False, bind=engineUsers)
 
 middleware = [
     Middleware(
@@ -49,86 +58,91 @@ class Parking_place(BaseModel):
     location: str="None"
     size: str="None"
 #массив в котрый передаются данные о пользователях которые хотят зарегестрироваться
-people_to_signup=[Signup_User(name="aaa",email="aboba@mail.ru",password="sussus")]
-#массив с данными о парковках
-parkings=[Parking_place(name="aboba",location="Ierusalim",size="4")]
 
-#функция для поиска по email
-def is_user(email):
-    for a in people_to_signup:
-        if a.email==email:
-            return True
-    return False
-#функция для проверки правильности входа (пароль)
-def is_user_r(email,password):
-    for a in people_to_signup:
-        if a.email==email:
-            if a.password==password:
-                return True
-            return False
-    return False
-#функция для поиска парковок
-def is_parkplace(search):
-    for a in parkings:
-        if a.name==search:
-            return True
-    return False
+
 
 #форма регистрации
 @app.post("/api/signup")
-async def login_person(*,data:Signup_User):
-    #тут я проверяю типо по email нету ли такго пользователя
-    if is_user(data.email)==False:
-        person = Signup_User(name=data.name,email=data.email,password=data.password)
-        people_to_signup.append(person)
+async def reg_person(*,data:Signup_User):
+    session = sessionUsers()
+    status = Registration(data, connection_string )
+    session.close()
+    if status == RegStatus.NewUser:
         return{
-            "SUCCESS":"SUCCESS",
-            "data":data,
-            "someshit" :people_to_signup
+            "SUCCESS":"SUCCESS"
         }
-    else:
+    elif status == RegStatus.ExistMail:  # Почта занята, пишите новую 
         return{
-            "FAILURE":"FAILURE",
+            "FAIL":"FAIL"
         }
+    
+ 
 
 #форма входа
 
 @app.post("/api/login")
 async def login_person(*,data:Login_User):
-    #person = Login_User(email=data.email,password=data.password)
-    #тут я проверяю типо по email есть ли такой пользователь
-    if(auth.authorize(data = data.email) == 1):
-         return{
-            "False":"False"
+    session = sessionUsers()
+    status = authorize(data, connection_string )
+    session.close() 
+    if status == AuthStatus.User:
+        return{
+            "SUCCESS":"SUCCESS"
         }
-    elif auth.authorize(data = data.email) == 2:
-         return{
-            "False":"False"
-        }
-    elif auth.authorize(data = data.email) == 3:
-         return{
-            "YesU":"YesU",
-            "data":data,
-            "someshit" :people_to_signup
-        }
-    elif auth.authorize(data = data.email) == 4:
-         return{
-            "YesA":"YesA",
-            "data":data,
-            "someshit" :people_to_signup
-        }    
+    elif status == AuthStatus.NoData: 
+        return{
+            "NOT FOUND":"NOT FOUND"
+        } # Такого юзера нет 
+    elif status == AuthStatus.IncorrectPassword:
+        return{
+            "WRONG PASS":"WRONG PASS"
+    }
+    
+
+
 #форма поиска
 @app.post("/api/search")
 async def search_parking(*,data:Search):
+    session = sessionUsers()
+    parkings = search_parking(data, connection_string )
+    data_p = [] 
+    for s in parkings:
+        data_p.append({
+            'city':  s[0],
+            'street': s[1],
+            'region': s[2],
+            'places': s[3],
+            'link': s[4]
+            })
+    session.close()
+    try:
+        return data_p
+    except:
+        return{
+            "FAIL":"FAIL"
+        }  
    #тут я проверяю типо по названию наличие парковки в базе
-    if is_parkplace(data.search)==True:
-        return{
-            "status":"1",            
-        }
-    else:
-        return{
-            "status":"0",
-        }
+    
+
+#форма выгрузки всех парковок
+@app.get("/api/home")
+async def send_parkings():
+    session = sessionUsers()
+    parkings = export( connection_string )
+    data_p = [] 
+    for s in parkings:
+        data_p.append({
+            'city':  s[0],
+            'street': s[1],
+            'region': s[2],
+            'places': s[3],
+            'link': s[4]
+            })
+    session.close() 
+    return data_p   
+
+
+
 
 if __name__ == "__main__":
     uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
