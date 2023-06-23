@@ -37,6 +37,7 @@ middleware = [
     )
 ]
 app = FastAPI(title="Trading apps",middleware=middleware)
+Signed_User = []
 
 #class для формы логина
 class Login_User(BaseModel):
@@ -58,8 +59,16 @@ class Parking_place(BaseModel):
     name: str="None"
     location: str="None"
     size: str="None"
-#массив в котрый передаются данные о пользователях которые хотят зарегестрироваться
 
+
+#class для выхода
+class Ext(BaseModel):
+    mes: str="None"
+
+#class для резервирования/отрезервирования
+class res_User(BaseModel):
+    user_id: int = 0
+    park_id: int=0
 
 
 #форма регистрации ГОТОВО!
@@ -95,8 +104,11 @@ async def login_person(*,data:Login_User):
     status = authorize(data_log, usersString )
     session.close() 
     if status[0][0] == AuthStatus.User:
+        del Signed_User [:]
+        Signed_User.append(status[0][1])
         return{
-            "SUCCESS":status[0][1] 
+            "SUCCESS":"SUCCESS" 
+            # "SUCCESS":status[0][1] 
         }
     elif status[0][0] == AuthStatus.NoData: 
         return{
@@ -149,34 +161,100 @@ async def send_parkings():
                 'places':  parkings[idx][3]
                 })
         session.close() 
-        return data_p   
+        return {
+            "prks":data_p,
+            "user":Signed_User[0]
+            }
     except:
         return {
             "F": len(parkings)
         }
 
-# @app.post("/api/reserved")
-# def Reserve():
-#     session = sessionUsers()
-#     data_res = {
 
-#     }
-#     status=PlaceReservation(data_res,usersString)
-#     if(status==ResStatus.SuccessRes):
-#         print("Место зарезирвировано")
-#     elif(status==ResStatus.UnsuccessRes):
-#         print("Мест нет")  #Когда заканчиваются места 
-#     session.close()
+@app.post("/api/homeq")
+async def quit(*,data:Ext):
+    del Signed_User[:]
+    if(data.mes=="quit"):
+        return {
+            "OK":"OK"
+        }
+    else:
+        return{
+            "NONONO":"NONONO"
+        }
+    
 
-# @app.post("/api/unreserved")
-# def FreeingUpPlaces(): #Освобождение мест (True or False) If true we will change BD!
-#     session = sessionUsers()
-#     status=FreeingUpParkingPlace(dataRes,usersString)
-#     if(status==True):
-#         print("Место освобождено")
-#     else:
-#         print("Неудачно")
-#     session.close()
+@app.post("/api/homer")
+def Reserve(*,data:res_User):
+    session = sessionUsers()
+    data_res = {
+        'user_id': data.user_id,
+        'parking_id': data.park_id
+    }
+    status=PlaceReservation(data_res,usersString)
+    parkings = export( usersString )
+    session.close()
+    if(status==ResStatus.SuccessRes):
+        try: 
+            data_p = [] 
+            for idx , x in enumerate(parkings):
+                data_p.append({
+                'id': idx, 
+                'city':  parkings[idx][0],
+                'street':  parkings[idx][1],
+                'region':  parkings[idx][2],
+                'places':  parkings[idx][3]
+                })
+            return {
+                "prks":data_p,
+                "user": "RESERVED"
+                }
+        except:
+            return {
+                "F": "F"
+            }
+        print("Место зарезирвировано")
+    elif(status==ResStatus.UnsuccessRes):
+        return {
+
+            "NOT RESERVED": "NOT RESERVED"
+        }
+    
+
+@app.post("/api/homeu")
+def FreeingUpPlaces(*,data:res_User): #Освобождение мест (True or False) If true we will change BD!
+    session = sessionUsers()
+    data_res = {
+        'user_id': data.user_id,
+        'parking_id': data.park_id
+    }
+    status=FreeingUpParkingPlace(data_res,usersString)
+    parkings = export( usersString )
+    session.close()
+    if(status==True):
+        try: 
+            data_p = [] 
+            for idx , x in enumerate(parkings):
+                data_p.append({
+                'id': idx, 
+                'city':  parkings[idx][0],
+                'street':  parkings[idx][1],
+                'region':  parkings[idx][2],
+                'places':  parkings[idx][3]
+                })
+            return {
+                "prks":data_p,
+                "user": "FREE"
+                }
+        except:
+            return {
+                "F": "F"
+            }
+    else :
+        return {
+
+            "UNRESERVED": "UNRESERVED"
+        }
 
 
 print(export(usersString))

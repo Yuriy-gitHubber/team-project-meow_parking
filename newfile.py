@@ -28,21 +28,20 @@ connection_string = engineUsers.connect()
 
 sessionUsers = sessionmaker(autoflush=False, bind=engineUsers)
 
-def login_person():
+
+def Reserve():
     session = sessionUsers()
-    data_log = {
-        'email':'hayrullin.yura@yandex.ru',
-        'password':'password123456'
+    data_res = {
+        'user_id': 12,
+        'parking_id': 1
     }
-    status = authorize(data_log, usersString )
+    status=FreeingUpParkingPlace(data_res,usersString)
+    if(status==ResStatus.SuccessRes):
+        print("Место зарезирвировано")
+    elif(status==ResStatus.UnsuccessRes):
+        print("Мест нет")  #Когда заканчиваются места 
     session.close()
-    if status[0][0] == AuthStatus.User:
-        print(status[0][1])
-    elif status[0][0] == AuthStatus.NoData:
-        print("NOT FOUND")
-    elif status[0][0] == AuthStatus.IncorrectPassword:
-        print("WRONG PASSWORD")
-login_person()
+Reserve()
         
 # print(export(usersString))
 
