@@ -18,11 +18,12 @@ from starlette.middleware.cors import CORSMiddleware
 from src.reg import exportUsers,Registration,RegStatus
 from src.auth import authorize,AuthStatus
 from src.ResPlace import PlaceReservation,ResStatus,FreeingUpParkingPlace
-from src.search import CheckUserParkingPlaces
-connection_string = "postgres://postgres:200210@localhost:5432/parking_information"
+from src.search import CheckUserParkingPlaces, export
 
-engineUsers = create_engine('postgresql+psycopg2://postgres:200210@localhost:5432/parking_information', echo=True)
-engineUsers.connect()
+usersString = 'postgresql+psycopg2://postgres:200210@localhost:5432/parking_information'
+
+engineUsers = create_engine(usersString, echo=True)
+connection_string = engineUsers.connect()
 
 sessionUsers = sessionmaker(autoflush=False, bind=engineUsers)
 
@@ -61,11 +62,16 @@ class Parking_place(BaseModel):
 
 
 
-#форма регистрации
+#форма регистрации ГОТОВО!
 @app.post("/api/signup")
 async def reg_person(*,data:Signup_User):
     session = sessionUsers()
-    status = Registration(data, connection_string )
+    data_reg = {
+    'name': data.name,
+    'email':data.email,
+    'password':data.password
+    }
+    status = Registration(data_reg, usersString )
     session.close()
     if status == RegStatus.NewUser:
         return{
@@ -78,22 +84,25 @@ async def reg_person(*,data:Signup_User):
     
  
 
-#форма входа
-
+#форма входа ГОТОВО!
 @app.post("/api/login")
 async def login_person(*,data:Login_User):
     session = sessionUsers()
-    status = authorize(data, connection_string )
+    data_log = {
+        'email':data.email,
+        'password':data.password
+    }
+    status = authorize(data_log, usersString )
     session.close() 
-    if status == AuthStatus.User:
+    if status[0][0] == AuthStatus.User:
         return{
-            "SUCCESS":"SUCCESS"
+            "SUCCESS":status[0][1] 
         }
-    elif status == AuthStatus.NoData: 
+    elif status[0][0] == AuthStatus.NoData: 
         return{
             "NOT FOUND":"NOT FOUND"
         } # Такого юзера нет 
-    elif status == AuthStatus.IncorrectPassword:
+    elif status[0][0] == AuthStatus.IncorrectPassword:
         return{
             "WRONG PASS":"WRONG PASS"
     }
@@ -104,7 +113,7 @@ async def login_person(*,data:Login_User):
 @app.post("/api/search")
 async def search_parking(*,data:Search):
     session = sessionUsers()
-    parkings = search_parking(data, connection_string )
+    parkings = search_parking(data, usersString )
     data_p = [] 
     for s in parkings:
         data_p.append({
@@ -124,28 +133,55 @@ async def search_parking(*,data:Search):
    #тут я проверяю типо по названию наличие парковки в базе
     
 
-#форма выгрузки всех парковок
+#форма выгрузки всех парковок ГОТОВО!
 @app.get("/api/home")
 async def send_parkings():
     session = sessionUsers()
-    parkings = export( connection_string )
-    data_p = [] 
-    for s in parkings:
-        data_p.append({
-            'city':  s[0],
-            'street': s[1],
-            'region': s[2],
-            'places': s[3],
-            'link': s[4]
-            })
-    session.close() 
-    return data_p   
+    parkings = export( usersString )
+    try: 
+        data_p = [] 
+        for idx , x in enumerate(parkings):
+            data_p.append({
+                'id': idx, 
+                'city':  parkings[idx][0],
+                'street':  parkings[idx][1],
+                'region':  parkings[idx][2],
+                'places':  parkings[idx][3]
+                })
+        session.close() 
+        return data_p   
+    except:
+        return {
+            "F": len(parkings)
+        }
+
+# @app.post("/api/reserved")
+# def Reserve():
+#     session = sessionUsers()
+#     data_res = {
+
+#     }
+#     status=PlaceReservation(data_res,usersString)
+#     if(status==ResStatus.SuccessRes):
+#         print("Место зарезирвировано")
+#     elif(status==ResStatus.UnsuccessRes):
+#         print("Мест нет")  #Когда заканчиваются места 
+#     session.close()
+
+# @app.post("/api/unreserved")
+# def FreeingUpPlaces(): #Освобождение мест (True or False) If true we will change BD!
+#     session = sessionUsers()
+#     status=FreeingUpParkingPlace(dataRes,usersString)
+#     if(status==True):
+#         print("Место освобождено")
+#     else:
+#         print("Неудачно")
+#     session.close()
 
 
-
-
-if __name__ == "__main__":
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
+print(export(usersString))
+# if __name__ == "__main__":
+#     uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
 
 #для запуска сервака в терминале нужно перейти в папку с этим файлом и написать
 # python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
